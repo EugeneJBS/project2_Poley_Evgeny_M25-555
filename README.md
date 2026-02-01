@@ -79,8 +79,7 @@ make package-install
 
 ## Демонстрация (asciinema)
 
-Запись процесса работы с базой данных доступна по ссылке:
-
+https://asciinema.org/a/QEjeIYhAryeoM5UC
 
 ## Автор
 
