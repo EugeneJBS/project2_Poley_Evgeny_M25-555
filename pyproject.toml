@@ -1,10 +1,10 @@
 [tool.poetry]
 name = "project2_Poley_Evgeny_M25-555"
 version = "0.1.0"
-description = "Учебный проект: примитивная база данных"
+description = "Примитивная база данных"
 authors = ["Poley Evgeny"]
 packages = [
-    { include = "src" },
+    {include = "src"},
 ]
 
 [tool.poetry.dependencies]
