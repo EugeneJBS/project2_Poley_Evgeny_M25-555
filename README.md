@@ -74,7 +74,7 @@
 
 ## Демонстрация (asciinema)
 
-Ссылка: 
+Ссылка: https://asciinema.org/a/1kp6w8FnUMLe3r1K
 
 ## Автор
 
