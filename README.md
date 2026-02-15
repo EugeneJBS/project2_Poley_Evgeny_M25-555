@@ -21,7 +21,7 @@
 ## Установка и запуск
 1. **Клонирование репозитория:**
    ```bash
-   git clone [https://github.com/EugeneJBS/project2_Poley_Evgeny_M25-555.git]
+   git clone https://github.com/EugeneJBS/project2_Poley_Evgeny_M25-555.git
    ```
    ```bash
    cd project2_Poley_Evgeny_M25-555
