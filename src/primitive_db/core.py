@@ -1,117 +1,83 @@
+"""
+Основная бизнес-логика базы данных: CRUD-операции и управление таблицами.
+"""
+
 from typing import Any, Dict, List, Tuple
 
 from .constants import VALID_TYPES
 
 
-def _get_table_schema(
-    metadata: Dict[str, Any],
-    table_name: str,
-) -> List[Dict[str, Any]]:
-    if table_name not in metadata:
-        raise ValueError(f'Ошибка: Таблица "{table_name}" не существует.')
-    return metadata[table_name]["columns"]
-
-
 def create_table(
     metadata: Dict[str, Any],
     table_name: str,
-    columns: List[Tuple[str, str]],
+    columns: List[Tuple[str, str]]
 ) -> Dict[str, Any]:
+    """Создает новую таблицу в метаданных с автоматическим ID."""
     if table_name in metadata:
-        raise ValueError(f'Ошибка: Таблица "{table_name}" уже существует.')
+        print(f'Ошибка: Таблица "{table_name}" уже существует.')
+        return metadata
 
-    full_columns: List[Tuple[str, str]] = [("ID", "int")]
+    # ID всегда идет первым и управляется системой
+    full_columns = [{"name": "ID", "type": "int"}]
     for name, col_type in columns:
-        if name.lower() == "id":
+        if name.upper() == "ID":
             continue
         if col_type not in VALID_TYPES:
-            raise ValueError(
-                f"Некорректный тип столбца: {col_type}. "
-                "Допустимые типы: int, str, bool.",
-            )
-        full_columns.append((name, col_type))
+            raise ValueError(f"Некорректный тип: {col_type}.")
+        full_columns.append({"name": name, "type": col_type})
 
-    metadata[table_name] = {
-        "columns": [
-            {"name": name, "type": col_type}
-            for name, col_type in full_columns
-        ],
-    }
+    metadata[table_name] = {"columns": full_columns}
     return metadata
 
 
-def drop_table(
-    metadata: Dict[str, Any],
-    table_name: str,
-) -> Dict[str, Any]:
+def drop_table(metadata: Dict[str, Any], table_name: str) -> Dict[str, Any]:
+    """Удаляет таблицу из метаданных."""
     if table_name not in metadata:
-        raise ValueError(f'Ошибка: Таблица "{table_name}" не существует.')
-
+        raise KeyError(table_name)
     del metadata[table_name]
     return metadata
-
-
-def _next_id(table_data: List[Dict[str, Any]]) -> int:
-    if not table_data:
-        return 1
-    max_id = max(int(row.get("ID", 0)) for row in table_data)
-    return max_id + 1
-
-
-def _validate_type(expected: str, value: Any) -> None:
-    if expected == "int" and not isinstance(value, int):
-        raise ValueError(f"Некорректное значение: {value}. Попробуйте снова.")
-    if expected == "str" and not isinstance(value, str):
-        raise ValueError(f"Некорректное значение: {value}. Попробуйте снова.")
-    if expected == "bool" and not isinstance(value, bool):
-        raise ValueError(f"Некорректное значение: {value}. Попробуйте снова.")
 
 
 def insert_row(
     metadata: Dict[str, Any],
     table_name: str,
     values: List[Any],
-    table_data: List[Dict[str, Any]],
+    table_data: List[Dict[str, Any]]
 ) -> Tuple[List[Dict[str, Any]], int]:
-    columns = _get_table_schema(metadata, table_name)
-    non_id_columns = [c for c in columns if c["name"] != "ID"]
+    """Добавляет новую запись с валидацией типов."""
+    schema = metadata[table_name]["columns"]
+    non_id_cols = [c for c in schema if c["name"] != "ID"]
 
-    if len(values) != len(non_id_columns):
-        raise ValueError("Некорректное количество значений для вставки.")
+    if len(values) != len(non_id_cols):
+        raise ValueError("Некорректное количество значений.")
 
-    row: Dict[str, Any] = {}
-    row_id = _next_id(table_data)
-    row["ID"] = row_id
+    new_id = max([r["ID"] for r in table_data], default=0) + 1
+    new_row = {"ID": new_id}
 
-    for col, value in zip(non_id_columns, values):
-        _validate_type(col["type"], value)
-        row[col["name"]] = value
+    for col, val in zip(non_id_cols, values):
+        # Проверка типов данных
+        if col["type"] == "int" and not isinstance(val, int):
+            raise ValueError(f"Некорректное значение: {val}. Ожидался int.")
+        if col["type"] == "bool" and not isinstance(val, bool):
+            raise ValueError(f"Некорректное значение: {val}. Ожидался bool.")
+        new_row[col["name"]] = val
 
-    table_data.append(row)
-    return table_data, row_id
+    table_data.append(new_row)
+    return table_data, new_id
 
 
 def select_rows(
-    metadata: Dict[str, Any],
-    table_name: str,
     table_data: List[Dict[str, Any]],
-    where_clause: Dict[str, Any] | None,
+    where_clause: Dict[str, Any] = None
 ) -> List[Dict[str, Any]]:
-    _get_table_schema(metadata, table_name)
-
+    """Фильтрует записи по условию WHERE."""
     if not where_clause:
-        return list(table_data)
+        return table_data
 
-    result: List[Dict[str, Any]] = []
-    for row in table_data:
-        matches = True
-        for col, value in where_clause.items():
-            if row.get(col) != value:
-                matches = False
-                break
-        if matches:
-            result.append(row)
-    return result
+    return [
+        row for row in table_data
+        if all(row.get(k) == v for k, v in where_clause.items())
+    ]
 
 
 def update_rows(
@@ -119,31 +85,22 @@ def update_rows(
     table_name: str,
     table_data: List[Dict[str, Any]],
     set_clause: Dict[str, Any],
-    where_clause: Dict[str, Any],
+    where_clause: Dict[str, Any]
 ) -> Tuple[List[Dict[str, Any]], List[int]]:
-    columns = _get_table_schema(metadata, table_name)
-    column_names = {c["name"] for c in columns}
+    """Обновляет значения в строках, подходящих под условие."""
+    schema = metadata[table_name]["columns"]
+    updated_ids = []
 
-    for col in set_clause:
-        if col not in column_names:
-            raise ValueError(f'Ошибка: столбец "{col}" не существует.')
-
-    updated_ids: List[int] = []
     for row in table_data:
-        matches = True
-        for col, value in where_clause.items():
-            if row.get(col) != value:
-                matches = False
-                break
-        if not matches:
-            continue
-
-        for col, value in set_clause.items():
-            schema_col = next(c for c in columns if c["name"] == col)
-            _validate_type(schema_col["type"], value)
-            row[col] = value
-
-        updated_ids.append(int(row["ID"]))
+        # Проверяем условие WHERE
+        if all(row.get(k) == v for k, v in where_clause.items()):
+            for col_name, new_val in set_clause.items():
+                # Валидация типа для обновляемого поля
+                col_info = next(c for c in schema if c["name"] == col_name)
+                if col_info["type"] == "int" and not isinstance(new_val, int):
+                    raise ValueError(f"Ожидался int для {col_name}")
+                row[col_name] = new_val
+            updated_ids.append(row["ID"])
 
     return table_data, updated_ids
 
@@ -152,39 +109,37 @@ def delete_rows(
     metadata: Dict[str, Any],
     table_name: str,
     table_data: List[Dict[str, Any]],
-    where_clause: Dict[str, Any],
+    where_clause: Dict[str, Any]
 ) -> Tuple[List[Dict[str, Any]], List[int]]:
-    _get_table_schema(metadata, table_name)
+    """Удаляет строки, подходящие под условие."""
+    if table_name not in metadata:
+        raise KeyError(table_name)
 
-    remaining: List[Dict[str, Any]] = []
-    deleted_ids: List[int] = []
+    new_data = []
+    deleted_ids = []
 
     for row in table_data:
-        matches = True
-        for col, value in where_clause.items():
-            if row.get(col) != value:
-                matches = False
-                break
-        if matches:
-            deleted_ids.append(int(row.get("ID", 0)))
+        if all(row.get(k) == v for k, v in where_clause.items()):
+            deleted_ids.append(row["ID"])
         else:
-            remaining.append(row)
+            new_data.append(row)
 
-    return remaining, deleted_ids
+    return new_data, deleted_ids
 
 
 def get_table_info(
     metadata: Dict[str, Any],
     table_name: str,
-    table_data: List[Dict[str, Any]],
+    table_data: List[Dict[str, Any]]
 ) -> str:
-    columns = _get_table_schema(metadata, table_name)
-    columns_str = ", ".join(f'{c["name"]}:{c["type"]}' for c in columns)
-    count = len(table_data)
+    """Формирует строковую информацию о таблице."""
+    if table_name not in metadata:
+        raise KeyError(table_name)
 
-    lines = [
-        f"Таблица: {table_name}",
-        f"Столбцы: {columns_str}",
-        f"Количество записей: {count}",
-    ]
-    return "\n".join(lines)
+    schema = metadata[table_name]["columns"]
+    cols_str = ", ".join(f"{c['name']}:{c['type']}" for c in schema)
+    return (
+        f"Таблица: {table_name}\n"
+        f"Столбцы: {cols_str}\n"
+        f"Количество записей: {len(table_data)}"
+    )
